@@ -12,7 +12,7 @@ pub struct Game {
 
     pub scores: Vec<u32>,
     pub tiles: Vec<u32>,
-    pub alive: Vec<bool>
+    pub alive: Vec<bool>,
 }
 
 impl Game {
@@ -56,7 +56,7 @@ impl Game {
         let mut patch_idx: usize = 0;
         loop {
             idx += patch[patch_idx].as_isize().unwrap();
-            patch_idx = patch_idx + 1;
+            patch_idx += 1;
             if patch_idx >= patch.len() {
                 break;
             }

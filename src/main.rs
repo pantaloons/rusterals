@@ -38,7 +38,8 @@ impl Client {
     fn join_test_room(&mut self) {
         self.emit(array!["join_private", PRIVATE_TEST_ROOM, BOT_PASSWORD]);
         self.emit(array!["set_force_start", PRIVATE_TEST_ROOM, true]);
-        println!("Waiting for custom game: http://bot.generals.io/games/{}", PRIVATE_TEST_ROOM);
+        println!("Waiting for custom game: http://bot.generals.io/games/{}",
+                 PRIVATE_TEST_ROOM);
     }
 
     #[allow(dead_code)]
@@ -74,33 +75,34 @@ impl Handler for Client {
                 "game_start" => {
                     self.in_game = true;
                     self.replay_id = msg[1]["replay_id"].as_str().unwrap().to_string();
-                    println!("FFA starting. Replay will be at http://bot.generals.io/replays/{}", self.replay_id);
+                    println!("Game starting. Replay will be at http://bot.generals.io/replays/{}",
+                             self.replay_id);
                     self.game.handle_game_start(&msg[1]);
                     self.strategy.initialize(&self.game);
                     self.out.timeout(0, ACTION_TOKEN).unwrap();
-                },
+                }
                 "game_update" => {
                     if self.in_game {
                         self.game.handle_game_update(&msg[1]);
                     }
-                },
+                }
                 "game_lost" => {
                     println!("Game lost.");
                     self.in_game = false;
                     self.game = Game::new();
                     self.emit(array!["leave_game"]);
-                },
+                }
                 "game_won" => {
                     println!("Game won.");
                     self.in_game = false;
                     self.game = Game::new();
                     self.emit(array!["leave_game"]);
-                },
-                "queue_update" | "chat_message" | "pre_game_start" | "game_over" | "stars" | "rank" => (),
+                }
+                "queue_update" | "chat_message" | "pre_game_start" | "game_over" | "stars" |
+                "rank" => (),
                 _ => panic!("Unknown message {:?}", msg),
             }
-        }
-        else if operation != '0' && operation != '3' && operation != '4' {
+        } else if operation != '0' && operation != '3' && operation != '4' {
             panic!("Got unknown operation: {:?}", operation);
         }
         Ok(())
@@ -110,8 +112,7 @@ impl Handler for Client {
         if token == PING_TOKEN {
             self.out.send("2").unwrap();
             self.out.timeout(10_000, PING_TOKEN).unwrap();
-        }
-        else if token == ACTION_TOKEN {
+        } else if token == ACTION_TOKEN {
             if self.in_game {
                 self.strategy.initialize(&self.game);
                 if let Some((src, dst, half)) = self.strategy.next_move() {
@@ -119,15 +120,13 @@ impl Handler for Client {
                     let dst = dst.y * self.game.width + dst.y;
                     if half {
                         self.emit(array!["attack", src, dst, true]);
-                    }
-                    else {
+                    } else {
                         self.emit(array!["attack", src, dst]);
                     }
                 }
 
                 self.out.timeout(500, ACTION_TOKEN).unwrap();
-            }
-            else {
+            } else {
                 self.join_ffa();
             }
         }
@@ -140,11 +139,15 @@ impl Handler for Client {
 }
 
 fn main() {
-    connect("ws://botws.generals.io/socket.io/?EIO=3&transport=websocket", |out| Client {
-        out: out,
-        game: Game::new(),
-        strategy: MonteCarlo::new(),
-        in_game: false,
-        replay_id: "".to_string(),
-    }).unwrap();
+    connect("ws://botws.generals.io/socket.io/?EIO=3&transport=websocket",
+            |out| {
+        Client {
+            out: out,
+            game: Game::new(),
+            strategy: MonteCarlo::new(),
+            in_game: false,
+            replay_id: "".to_string(),
+        }
+    })
+        .unwrap();
 }

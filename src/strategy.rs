@@ -6,10 +6,10 @@ use std::collections::BTreeMap;
 const WIN_VALUE: i32 = 10_000;
 const LOSS_VALUE: i32 = -10_000;
 
-#[derive(Clone, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(Clone, PartialEq, PartialOrd, Eq, Ord, Debug)]
 pub struct Pair {
     pub x: usize,
-    pub y: usize
+    pub y: usize,
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -26,7 +26,7 @@ enum TileType {
 struct Tile {
     kind: TileType,
     owner: i32,
-    count: i32
+    count: i32,
 }
 
 #[derive(Clone)]
@@ -45,7 +45,7 @@ struct State {
     cities: Vec<u32>,
 }
 
-#[derive(Clone, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(Clone, PartialEq, PartialOrd, Eq, Ord, Debug)]
 struct Action {
     src: Pair,
     dst: Pair,
@@ -74,15 +74,18 @@ impl SearchNode {
     pub fn new(state: State) -> Self {
         SearchNode {
             state: state,
-            actions: BTreeMap::new()
+            actions: BTreeMap::new(),
         }
     }
 
     pub fn search(&mut self, depth: i32) -> i32 {
         if self.state.is_game_over() {
-            return if self.state.is_player_winner() { WIN_VALUE } else { LOSS_VALUE };
-        }
-        else if depth == 10 {
+            return if self.state.is_player_winner() {
+                WIN_VALUE
+            } else {
+                LOSS_VALUE
+            };
+        } else if depth == 10 {
             return self.state.evaluate();
         }
 
@@ -99,12 +102,13 @@ impl SearchNode {
 
     pub fn get_action_transfer(&mut self, action: &Option<Action>) -> &mut ActionTransfer {
         if !self.actions.contains_key(action) {
-            self.actions.insert(action.to_owned(), ActionTransfer {
-                visit_count: 0,
-                cumulative_score: 0,
+            self.actions.insert(action.to_owned(),
+                                ActionTransfer {
+                                    visit_count: 0,
+                                    cumulative_score: 0,
 
-                next_node: SearchNode::new(self.state.simulate_action(action))
-            });
+                                    next_node: SearchNode::new(self.state.simulate_action(action)),
+                                });
         }
         self.actions.get_mut(action).unwrap()
     }
@@ -146,17 +150,16 @@ impl State {
                 let value = game.raw_map[game.width * game.height + i * game.width + j];
 
                 let kind: TileType = match value {
-                    -1 => TileType::Plain,
                     -2 => TileType::Mountain,
                     -3 => TileType::Fog,
                     -4 => TileType::Obstacle,
-                    _ => TileType::Plain
+                    -1 | _ => TileType::Plain,
                 };
 
                 state.tiles[i].push(Tile {
                     kind: kind,
                     owner: value,
-                    count: game.raw_map[i * game.width + j]
+                    count: game.raw_map[i * game.width + j],
                 });
             }
         }
@@ -198,7 +201,8 @@ impl State {
                     for k in 0..4 {
                         let nx = j as isize + DX[k];
                         let ny = i as isize + DY[k];
-                        if nx >= 0 && ny < self.width as isize && ny >= 0 && ny < self.height as isize {
+                        if nx >= 0 && ny < self.width as isize && ny >= 0 &&
+                           ny < self.height as isize {
                             let nx: usize = nx as usize;
                             let ny: usize = ny as usize;
                             if self.tiles[ny][nx].kind == TileType::Mountain {
@@ -207,7 +211,7 @@ impl State {
 
                             moves.push(Action {
                                 src: Pair { x: j, y: i },
-                                dst: Pair { x: nx, y: ny }
+                                dst: Pair { x: nx, y: ny },
                             });
                         }
                     }
@@ -219,8 +223,7 @@ impl State {
         if index == moves.len() {
             // We always have the option to do nothing.
             None
-        }
-        else {
+        } else {
             Some(moves[index].clone())
         }
     }
@@ -233,14 +236,13 @@ impl State {
             let src_count: i32 = next.tiles[action.src.y][action.src.x].count;
             let src_owner: usize = next.tiles[action.src.y][action.src.x].owner as usize;
 
-            let ref mut dst = next.tiles[action.dst.y][action.dst.x];
+            let mut dst = &mut next.tiles[action.dst.y][action.dst.x];
             let dst_owner: usize = dst.owner as usize;
 
             if dst.owner >= 0 {
                 if dst_owner == src_owner {
                     dst.count += src_count - 1;
-                }
-                else if src_count - 1 > dst.count {
+                } else if src_count - 1 > dst.count {
                     if dst.kind == TileType::Plain {
                         next.scores[src_owner] -= (dst.count - (src_count - 1)) as u32;
                         next.scores[dst_owner] -= dst.count as u32;
@@ -248,8 +250,7 @@ impl State {
                         next.land[src_owner] += 1;
                         dst.count = src_count - 1 - dst.count;
                         dst.owner = src_owner as i32;
-                    }
-                    else if dst.kind == TileType::City {
+                    } else if dst.kind == TileType::City {
                         next.scores[src_owner] -= (dst.count - (src_count - 1)) as u32;
                         next.scores[dst_owner] -= dst.count as u32;
                         next.land[dst_owner] -= 1;
@@ -258,8 +259,7 @@ impl State {
                         dst.owner = src_owner as i32;
                         next.cities[dst_owner] -= 1;
                         next.cities[src_owner] += 1;
-                    }
-                    else if dst.kind == TileType::General {
+                    } else if dst.kind == TileType::General {
                         dst.kind = TileType::City;
 
                         // Transfer score first from general battle.
@@ -280,33 +280,26 @@ impl State {
                         // what squares this player might have owned, and transfer them
                         // as part of the state transfer weight. This isn't feasible,
                         // instead just always terminate search here as being good.
-                    }
-                    else {
+                    } else {
                         panic!("Bad tile found.");
                     }
-                }
-                else {
+                } else {
                     dst.count = dst.count - (src_count - 1);
                 }
-            }
-            else {
-                if dst.kind == TileType::City {
-                    if src_count - 1 > dst.count {
-                        next.cities[src_owner] += 1;
-                        next.land[src_owner] += 1;
-                        dst.owner = src_owner as i32;
-                    }
-                    else {
-                        // TODO: City will start regenerating units. Implement that.
-                        dst.count -= src_count - 1;
-                    }
-                }
-                else {
-                    assert_eq!(dst.kind, TileType::Plain);
-                    assert!(src_count > 1);
-                    dst.count = src_count - 1;
+            } else if dst.kind == TileType::City {
+                if src_count - 1 > dst.count {
+                    next.cities[src_owner] += 1;
                     next.land[src_owner] += 1;
+                    dst.owner = src_owner as i32;
+                } else {
+                    // TODO: City will start regenerating units. Implement that.
+                    dst.count -= src_count - 1;
                 }
+            } else {
+                assert_eq!(dst.kind, TileType::Plain);
+                assert!(src_count > 1);
+                dst.count = src_count - 1;
+                next.land[src_owner] += 1;
             }
         }
         if action.is_some() {
@@ -323,7 +316,8 @@ impl State {
             for i in 0..next.height {
                 for j in 0..next.width {
                     if next.tiles[i][j].owner >= 0 {
-                        next.tiles[i][j].count += next.cities[next.tiles[i][j].owner as usize] as i32;
+                        next.tiles[i][j].count += next.cities[next.tiles[i][j].owner as usize] as
+                                                  i32;
                     }
                 }
             }
@@ -358,9 +352,7 @@ pub struct MonteCarlo {
 
 impl MonteCarlo {
     pub fn new() -> Self {
-        MonteCarlo {
-            root: None,
-        }
+        MonteCarlo { root: None }
     }
 
     pub fn initialize(&mut self, game: &Game) {
@@ -371,17 +363,21 @@ impl MonteCarlo {
         assert!(self.root.is_some());
         let start = precise_time_ns();
 
+        let mut count = 0;
         loop {
+            count += 1;
             self.root.as_mut().unwrap().search(0);
             if precise_time_ns() - start > 450_000_000 {
                 break;
             }
         }
 
+        println!("Sampled {:?} walks for next move.", &count);
+
         let next_move = self.root.as_ref().unwrap().select_best_move();
         match next_move {
             None => None,
-            Some(action) => Some((action.src, action.dst, false))
+            Some(action) => Some((action.src, action.dst, false)),
         }
     }
 }
