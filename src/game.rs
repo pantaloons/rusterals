@@ -1,5 +1,6 @@
 use json::JsonValue;
 
+#[derive(Debug)]
 pub struct Game {
     pub initialized: bool,
     pub raw_map: Vec<i32>,

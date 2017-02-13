@@ -316,8 +316,8 @@ impl State {
             for i in 0..next.height {
                 for j in 0..next.width {
                     if next.tiles[i][j].owner >= 0 {
-                        next.tiles[i][j].count += next.cities[next.tiles[i][j].owner as usize] as
-                                                  i32;
+                        next.tiles[i][j].count +=
+                            next.cities[next.tiles[i][j].owner as usize] as i32;
                     }
                 }
             }
@@ -356,6 +356,7 @@ impl MonteCarlo {
     }
 
     pub fn initialize(&mut self, game: &Game) {
+        println!("Got game: {:?}", game);
         self.root = Some(SearchNode::new(State::new(game)));
     }
 
@@ -379,5 +380,33 @@ impl MonteCarlo {
             None => None,
             Some(action) => Some((action.src, action.dst, false)),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use strategy::MonteCarlo;
+    use game::Game;
+
+    #[test]
+    fn test_search() {
+        let mut search: MonteCarlo = MonteCarlo::new();
+        let game: Game = Game {
+            initialized: true,
+            idx: 0,
+            turn: 0,
+
+            width: 3,
+            height: 3,
+
+            scores: vec![1, 1],
+            tiles: vec![1, 1],
+            alive: vec![true, true],
+
+            raw_map: vec![0, 0, 0, 2, 0, 0, 0, 0, 0, -1, -1, -3, 0, -1, -3, -1, -1, -3],
+        };
+
+        search.initialize(&game);
+        assert!(search.next_move().is_some());
     }
 }
