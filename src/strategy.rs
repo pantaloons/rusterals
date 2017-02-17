@@ -19,21 +19,19 @@ impl Default for ActionTransfer {
         ActionTransfer {
             visit_count: 0,
             cumulative_score: 0,
-            next_node: SearchNode::new()
+            next_node: SearchNode::new(),
         }
     }
 }
 
 #[derive(Debug)]
 struct SearchNode {
-    actions: BTreeMap<Option<Action>, ActionTransfer>,
+    actions: BTreeMap<Action, ActionTransfer>,
 }
 
 impl SearchNode {
     pub fn new() -> Self {
-        SearchNode {
-            actions: BTreeMap::new(),
-        }
+        SearchNode { actions: BTreeMap::new() }
     }
 
     pub fn search<T: Rng>(&mut self, rng: &mut T, state: &mut State, depth: i32) -> i32 {
@@ -42,35 +40,35 @@ impl SearchNode {
         }
 
         let action = self.select_action(rng, state);
-        let counts_before = state.apply_action(&action);
-        let transfer: &mut ActionTransfer = self.get_action_transfer(&action);
+        let counts_before = state.apply_action(action);
+        let transfer: &mut ActionTransfer = self.get_action_transfer(action);
         let score = transfer.next_node.search(rng, state, depth - 1);
-        state.unapply_action(&action, counts_before);
+        state.unapply_action(action, counts_before);
         transfer.visit_count += 1;
         transfer.cumulative_score += score;
         score as i32
     }
 
-    pub fn select_action<T: Rng>(&self, rng: &mut T, state: &mut State) -> Option<Action> {
+    pub fn select_action<T: Rng>(&self, rng: &mut T, state: &mut State) -> Action {
         state.select_action(rng)
     }
 
-    pub fn get_action_transfer(&mut self, action: &Option<Action>) -> &mut ActionTransfer {
-        self.actions.entry(action.to_owned()).or_insert_with(ActionTransfer::default)
+    pub fn get_action_transfer(&mut self, action: Action) -> &mut ActionTransfer {
+        self.actions.entry(action).or_insert_with(ActionTransfer::default)
     }
 
-    pub fn select_best_move(&self) -> Option<Action> {
+    pub fn select_best_move(&self) -> Action {
         let mut best_score: f32 = f32::MIN;
-        let mut best_action: Option<Option<Action>> = None;
+        let mut best_action: Option<Action> = None;
         for (action, transfer) in &self.actions {
             let next_score = transfer.cumulative_score as f32 / transfer.visit_count as f32;
             if next_score > best_score {
                 best_score = next_score;
-                best_action = Some(action.to_owned());
+                best_action = Some(action);
             }
         }
 
-        best_action.unwrap_or_default()
+        best_action.unwrap()
     }
 }
 
@@ -89,11 +87,11 @@ impl MonteCarlo {
     pub fn new() -> Self {
         MonteCarlo {
             root: None,
-            rng: weak_rng()
+            rng: weak_rng(),
         }
     }
 
-    pub fn next_move(&mut self, game: &Game) -> Option<(Pair, Pair, bool)> {
+    pub fn next_move(&mut self, game: &Game) -> Action {
         let start = precise_time_ns();
 
         self.root = Some(SearchNode::new());
@@ -101,21 +99,20 @@ impl MonteCarlo {
 
         let mut count = 0;
         let depth = 50 - (game.turn % 50);
-        println!("{:?}\n{:?}", depth, &game);
         loop {
             count += 1;
             self.root.as_mut().unwrap().search(&mut self.rng, &mut state, depth);
-            if precise_time_ns() - start > 200_000_000 {
+            if precise_time_ns() - start > 200_000_00000 {
                 break;
             }
         }
 
-        println!("Sampled {:?} walks for next move. Depth as {:#?} {:#?} {:#?}.", &count, depth, start, precise_time_ns());
-        let next_move = self.root.as_ref().unwrap().select_best_move();
-        match next_move {
-            None => None,
-            Some(action) => Some((action.src, action.dst, false)),
-        }
+        println!("Sampled {:?} walks for next move. Depth as {:#?} {:#?} {:#?}.",
+                 &count,
+                 depth,
+                 start,
+                 precise_time_ns());
+        self.root.as_ref().unwrap().select_best_move();
     }
 }
 
@@ -131,7 +128,43 @@ mod tests {
     fn test_large() {
         let game: Game = Game {
             initialized: true,
-            raw_map: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -3, -3, -3, -3, -1, -1, -1, -3, -3, -3, -3, -3, -3, -4, -3, -3, -3, -3, -4, -3, -3, -3, -3, -1, 0, -1, -3, -4, -4, -4, -4, -4, -3, -3, -4, -3, -3, -3, -4, -4, -3, -3, -2, -1, -1, -3, -3, -3, -4, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -4, -3, -4, -3, -3, -3, -3, -3, -3, -3, -4, -3, -3, -4, -3, -4, -4, -3, -3, -3, -3, -4, -3, -3, -3, -3, -3, -3, -3, -4, -3, -3, -4, -3, -4, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -4, -3, -3, -3, -3, -3, -3, -3, -4, -3, -4, -3, -3, -3, -3, -3, -4, -3, -4, -3, -3, -3, -3, -3, -3, -4, -3, -3, -4, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -4, -4, -3, -3, -3, -3, -3, -3, -3, -3, -3, -4, -3, -4, -3, -3, -3, -3, -3, -4, -3, -3, -3, -3, -3, -3, -3, -3, -4, -3, -3, -4, -3, -3, -3, -4, -4, -3, -3, -3, -3, -3, -3, -3, -4, -3, -3, -3, -3, -3, -4, -3, -4, -3, -3, -3, -4, -4, -3, -3, -3, -3, -3, -3, -4, -3, -3, -4, -3, -3, -4, -3, -4, -3, -3, -3, -4, -3, -3, -3, -3, -4, -3, -3, -3, -3, -3, -3, -4, -3, -3, -3, -3, -4, -4, -3, -4, -4, -3, -3, -3, -3, -4, -3, -3, -4, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -4, -3, -3, -4, -3, -3, -3, -3, -4, -3, -4, -3, -3, -3, -3, -3, -3, -3, -3, -4, -4, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -4, -4, -3, -3, -4, -4, -3, -3, -3, -3, -3, -3, -3, -3, -3, -4, -3, -3, -3, -3, -3, -3, -4, -4, -3, -4, -3, -3, -3, -4, -3, -3, -3, -3, -4, -3, -3, -3, -3, -3, -3, -4, -3, -3, -3, -3, -3, -3, -3, -3, -4, -4, -4, -3, -4, -4, -3, -4, -3, -4],
+            raw_map: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                          3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -3, -3, -3,
+                          -3, -1, -1, -1, -3, -3, -3, -3, -3, -3, -4, -3, -3, -3, -3, -4, -3, -3,
+                          -3, -3, -1, 0, -1, -3, -4, -4, -4, -4, -4, -3, -3, -4, -3, -3, -3, -4,
+                          -4, -3, -3, -2, -1, -1, -3, -3, -3, -4, -3, -3, -3, -3, -3, -3, -3, -3,
+                          -3, -3, -4, -3, -4, -3, -3, -3, -3, -3, -3, -3, -4, -3, -3, -4, -3, -4,
+                          -4, -3, -3, -3, -3, -4, -3, -3, -3, -3, -3, -3, -3, -4, -3, -3, -4, -3,
+                          -4, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -4, -3, -3, -3, -3, -3,
+                          -3, -3, -4, -3, -4, -3, -3, -3, -3, -3, -4, -3, -4, -3, -3, -3, -3, -3,
+                          -3, -4, -3, -3, -4, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -4, -4,
+                          -3, -3, -3, -3, -3, -3, -3, -3, -3, -4, -3, -4, -3, -3, -3, -3, -3, -4,
+                          -3, -3, -3, -3, -3, -3, -3, -3, -4, -3, -3, -4, -3, -3, -3, -4, -4, -3,
+                          -3, -3, -3, -3, -3, -3, -4, -3, -3, -3, -3, -3, -4, -3, -4, -3, -3, -3,
+                          -4, -4, -3, -3, -3, -3, -3, -3, -4, -3, -3, -4, -3, -3, -4, -3, -4, -3,
+                          -3, -3, -4, -3, -3, -3, -3, -4, -3, -3, -3, -3, -3, -3, -4, -3, -3, -3,
+                          -3, -4, -4, -3, -4, -4, -3, -3, -3, -3, -4, -3, -3, -4, -3, -3, -3, -3,
+                          -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+                          -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -4, -3, -3, -4, -3, -3, -3, -3,
+                          -4, -3, -4, -3, -3, -3, -3, -3, -3, -3, -3, -4, -4, -3, -3, -3, -3, -3,
+                          -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -4, -4, -3, -3, -4, -4, -3,
+                          -3, -3, -3, -3, -3, -3, -3, -3, -4, -3, -3, -3, -3, -3, -3, -4, -4, -3,
+                          -4, -3, -3, -3, -4, -3, -3, -3, -3, -4, -3, -3, -3, -3, -3, -3, -4, -3,
+                          -3, -3, -3, -3, -3, -3, -3, -4, -4, -4, -3, -4, -4, -3, -4, -3, -4],
             player_index: 0,
             turn: 5,
             width: 19,

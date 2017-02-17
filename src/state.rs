@@ -1,17 +1,54 @@
 use game::Game;
 use rand::Rng;
 
-#[derive(Clone, PartialEq, PartialOrd, Eq, Ord, Debug)]
-pub struct Pair {
-    pub x: usize,
-    pub y: usize,
+struct Action(pub u16);
+
+/// Move representation:
+/// Bit 13: Whether anything is being moved or not. None is a valid move.
+/// Bit 12: Whether the move is "half" the units or not.
+/// Bits 10-11: Direction of the move, as LEFT = 0, UP = 1, RIGHT = 2, DOWN = 3
+/// Bits 0-5: Source x co-ord.
+/// Bits 6-10: Source y co-ord.
+macro_rules! make_action {
+    ($half:expr, $srcx:expr, $srcy:expr, $dir:expr) => (
+        if half {
+            0x2000 + 0x1000 + ((dir & 0x0007) << 10) + ((srcy & 0x0000001F) << 5) + ((srcx & 0x0000001F) << 0)
+        } else {
+            0x2000 + ((dir & 0x00000007) << 10) + ((srcy & 0x0000001F) << 5) + ((srcx & 0x0000001F) << 0)
+        } as Action
+    )
 }
 
-#[derive(Clone, PartialEq, PartialOrd, Eq, Ord, Debug)]
-pub struct Action {
-    pub half: bool,
-    pub src: Pair,
-    pub dst: Pair,
+impl Action {
+    #[inline]
+    fn is_empty(&self) -> bool {
+        self & 0x2000
+    }
+
+    #[inline]
+    fn is_half(&self) -> bool {
+        self & 0x1000
+    }
+
+    #[inline]
+    fn src_x(&self) -> usize {
+        self & 0x001F
+    }
+
+    #[inline]
+    fn dst_x(&self) -> usize {
+        self & 0x001F + DX[(self >> 10) & 0x0007]
+    }
+
+    #[inline]
+    fn src_y(&self) -> usize {
+        self & 0x03E0
+    }
+
+    #[inline]
+    fn dst_y(&self) -> usize {
+        self & 0x03E0 + DY[(self >> 10) & 0x0007]
+    }
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -44,7 +81,7 @@ pub struct State {
     land: Vec<u32>,
     cities: Vec<u32>,
 
-    pub owned_tiles: Vec<Vec<Pair>>,
+    owned_tiles: Vec<Vec<Pair>>,
     search_scratch: Vec<Action>,
 }
 
@@ -99,7 +136,8 @@ impl State {
                 continue;
             }
 
-            state.tiles[*general as usize / game.width][*general as usize % game.width].kind = TileType::General;
+            state.tiles[*general as usize / game.width][*general as usize % game.width].kind =
+                TileType::General;
         }
 
         for city in &game.cities {
@@ -117,7 +155,8 @@ impl State {
             for j in 0..state.width {
                 if state.tiles[i][j].owner == 0 {
                     state.owned_tiles[0].push(Pair { x: j, y: i });
-                    if state.tiles[i][j].kind == TileType::City || state.tiles[i][j].kind == TileType::General {
+                    if state.tiles[i][j].kind == TileType::City ||
+                       state.tiles[i][j].kind == TileType::General {
                         state.cities[0] += 1;
                     }
                 }
@@ -151,14 +190,20 @@ impl State {
 
                     self.search_scratch.push(Action {
                         half: false,
-                        src: Pair { x: tile.x, y: tile.y },
+                        src: Pair {
+                            x: tile.x,
+                            y: tile.y,
+                        },
                         dst: Pair { x: nx, y: ny },
                     });
 
                     if self.tiles[tile.y][tile.x].count > 2 {
                         self.search_scratch.push(Action {
                             half: true,
-                            src: Pair { x: tile.x, y: tile.y },
+                            src: Pair {
+                                x: tile.x,
+                                y: tile.y,
+                            },
                             dst: Pair { x: nx, y: ny },
                         });
                     }
@@ -175,14 +220,13 @@ impl State {
         }
     }
 
-    pub fn unapply_action(&mut self, action: &Option<Action>, counts: (u32, u32)) {
+    pub fn unapply_action(&mut self, action: Action, counts: (u32, u32)) {
         if self.global_turn % 50 == 0 {
             for ref tile in &self.owned_tiles[0] {
                 self.tiles[tile.y][tile.x].count -= self.cities[0];
             }
             self.scores[0] -= self.owned_tiles[0].len() as u32 * self.cities[0];
-        }
-        else if self.global_turn % 2 == 0 {
+        } else if self.global_turn % 2 == 0 {
             let mut count: u32 = 0;
             for ref tile in &self.owned_tiles[0] {
                 if self.tiles[tile.y][tile.x].kind == TileType::City ||
@@ -196,41 +240,41 @@ impl State {
 
         self.global_turn -= 1;
 
-        if action.is_some() {
-            let action: &Action = action.as_ref().unwrap();
+        if !action.is_empty() {
+            let dstx: usize = action.dst_x()
             if counts.1 == 0 {
                 self.owned_tiles[0].pop();
                 self.land[0] -= 1;
-                self.tiles[action.dst.y][action.dst.x].owner = self.player_count;
+                self.tiles[action.dst_y()][action.dst_x()].owner = self.player_count;
             }
-            self.tiles[action.src.y][action.src.x].count = counts.0;
-            self.tiles[action.dst.y][action.dst.x].count = counts.1;
+            self.tiles[action.src_y()][action.src_x()].count = counts.0;
+            self.tiles[action.dst_y()][action.dst_x()].count = counts.1;
         }
     }
 
-    pub fn apply_action(&mut self, action: &Option<Action>) -> (u32, u32) {
+    pub fn apply_action(&mut self, action: Action) -> (u32, u32) {
         let mut src_before: u32 = 0;
         let mut dst_before: u32 = 0;
 
-        if action.is_some() {
-            let action: &Action = action.as_ref().unwrap();
+        if !action.is_empty() {
+            src_before = self.tiles[action.src_y()][action.src_x()].count;
+            dst_before = self.tiles[action.dst_y()][action.dst_x()].count;
 
-            src_before = self.tiles[action.src.y][action.src.x].count;
-            dst_before = self.tiles[action.dst.y][action.dst.x].count;
-
-            if action.half {
-                self.tiles[action.dst.y][action.dst.x].count += self.tiles[action.src.y][action.src.x].count / 2;
-                self.tiles[action.src.y][action.src.x].count = (self.tiles[action.src.y][action.src.x].count + 1) / 2;
-            }
-            else {
-                self.tiles[action.dst.y][action.dst.x].count += self.tiles[action.src.y][action.src.x].count - 1;
-                self.tiles[action.src.y][action.src.x].count = 1;
+            if action.is_half() {
+                self.tiles[action.dst_y()][action.dst_x()].count +=
+                    self.tiles[action.src_y()][action.src_x()].count / 2;
+                self.tiles[action.src_y()][action.src_x()].count =
+                    (self.tiles[action.src_y()][action.src_x()].count + 1) / 2;
+            } else {
+                self.tiles[action.dst_y()][action.dst_x()].count +=
+                    self.tiles[action.src_y()][action.src_x()].count - 1;
+                self.tiles[action.src_y()][action.src_x()].count = 1;
             }
 
             if dst_before == 0 {
                 self.land[0] += 1;
                 self.owned_tiles[0].push(action.dst.clone());
-                self.tiles[action.dst.y][action.dst.x].owner = 0;
+                self.tiles[action.dst_y()][action.dst_x()].owner = 0;
             }
         }
 
@@ -240,8 +284,7 @@ impl State {
                 self.tiles[tile.y][tile.x].count += self.cities[0];
             }
             self.scores[0] += self.owned_tiles[0].len() as u32 * self.cities[0];
-        }
-        else if self.global_turn % 2 == 0 {
+        } else if self.global_turn % 2 == 0 {
             let mut count: u32 = 0;
             for ref tile in &self.owned_tiles[0] {
                 if self.tiles[tile.y][tile.x].kind == TileType::City ||
@@ -290,7 +333,11 @@ mod tests {
         };
 
         let mut state = State::new(&game);
-        state.apply_action(&Some(Action { half : false, src : Pair { x : 0, y : 1 }, dst : Pair { x : 0, y : 0 }}));
+        state.apply_action(&Some(Action {
+            half: false,
+            src: Pair { x: 0, y: 1 },
+            dst: Pair { x: 0, y: 0 },
+        }));
         println!("State: {:#?}", state);
 
         for _ in 0..10 {
