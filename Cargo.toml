@@ -5,6 +5,8 @@ authors = ["Michael McGee <michael@mcgee.nz>"]
 
 [profile.release]
 panic = "abort"
+lto = true
+debug = true
 
 [dependencies]
 ws = "*"

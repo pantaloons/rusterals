@@ -5,12 +5,14 @@ pub struct Game {
     pub initialized: bool,
     pub raw_map: Vec<i32>,
 
-    pub idx: i32,
+    pub player_index: usize,
     pub turn: i32,
 
     pub width: usize,
     pub height: usize,
 
+    pub generals: Vec<isize>,
+    pub cities: Vec<usize>,
     pub scores: Vec<u32>,
     pub tiles: Vec<u32>,
     pub alive: Vec<bool>,
@@ -22,12 +24,14 @@ impl Game {
             initialized: false,
             raw_map: vec![],
 
-            idx: 0,
+            player_index: 0,
             turn: 0,
 
             width: 0,
             height: 0,
 
+            generals: vec![],
+            cities: vec![],
             scores: vec![],
             tiles: vec![],
             alive: vec![],
@@ -35,7 +39,7 @@ impl Game {
     }
 
     pub fn handle_game_start(&mut self, data: &JsonValue) {
-        self.idx = data["playerIndex"].as_i32().unwrap();
+        self.player_index = data["playerIndex"].as_usize().unwrap();
     }
 
     fn initialize(&mut self, data: &JsonValue) {
@@ -47,6 +51,11 @@ impl Game {
             self.raw_map[i - 4] = data["map_diff"][i].as_i32().unwrap();
         }
 
+        self.generals = vec![0; data["scores"].len()];
+        for i in 0..data["generals"].len() {
+            self.generals[i] = data["generals"][i].as_isize().unwrap().into();
+        }
+        self.patch_cities(&data["cities_diff"]);
         self.scores = vec![0; data["scores"].len()];
         self.tiles = vec![0; data["scores"].len()];
         self.alive = vec![false; data["scores"].len()];
@@ -75,6 +84,36 @@ impl Game {
         }
     }
 
+    fn patch_cities(&mut self, patch: &JsonValue) {
+        let mut new_cities: Vec<usize> = Vec::new();
+        let mut idx: usize = 0;
+        let mut patch_idx: usize = 0;
+        loop {
+            let matching = patch[patch_idx].as_usize().unwrap();
+            for i in 0..matching {
+                new_cities.push(self.cities[idx + i])
+            }
+            patch_idx += 1;
+            if patch_idx >= patch.len() {
+                break;
+            }
+            idx += matching;
+
+            let mismatching = patch[patch_idx].as_usize().unwrap();
+            for i in 0..mismatching {
+                new_cities.push(patch[patch_idx + 1 + i].as_usize().unwrap());
+            }
+            patch_idx += mismatching + 1;
+            idx += mismatching;
+
+            if patch_idx >= patch.len() {
+                break;
+            }
+        }
+
+        self.cities = new_cities;
+    }
+
     fn update_scores(&mut self, scores: &JsonValue) {
         for i in 0..scores.len() {
             self.scores[i] = scores[i]["total"].as_u32().unwrap();
@@ -90,7 +129,12 @@ impl Game {
             return;
         }
 
+        self.turn = data["turn"].as_i32().unwrap();
         self.patch_map(&data["map_diff"]);
+        self.patch_cities(&data["cities_diff"]);
+        for i in 0..data["generals"].len() {
+            self.generals[i] = data["generals"][i].as_isize().unwrap();
+        }
         self.update_scores(&data["scores"]);
     }
 }
